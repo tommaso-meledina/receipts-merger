@@ -2,6 +2,7 @@
 name = "receipts-merger"
 version = "0.1.0"
 description = "Match scanned receipts to card statement entries and create reimbursement-ready PDFs."
+license = "MIT"
 authors = [
     { name = "Tommaso", email = "tommaso-meledina@users.noreply.github.com" }
 ]

@@ -124,3 +124,9 @@ uv run ty check
 uv run pytest
 uv build
 ```
+
+---
+
+## License
+
+[MIT](LICENSE)
