@@ -1,3 +1,6 @@
+import logging
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -17,6 +20,16 @@ from receipts_merger.models import (
 
 class ExtractionError(RuntimeError):
     pass
+
+
+class _OcrPathFilter(logging.Filter):
+    def __init__(self, path: Path) -> None:
+        super().__init__()
+        self.path = str(path)
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        record.ocr_path = self.path
+        return True
 
 
 def extract_document(path: Path, work_directory: Path, config: OcrConfig) -> ExtractedDocument:
@@ -71,20 +84,46 @@ def _run_ocr(input_path: Path, output_path: Path, config: OcrConfig) -> None:
     output_path.unlink(missing_ok=True)
 
     try:
-        exit_code = ocrmypdf.ocr(
-            input_path,
-            output_path,
-            language=config.languages,
-            output_type="pdf",
-            deskew=True,
-            skip_text=True,
-            progress_bar=False,
-        )
+        with _ocr_log_context(input_path):
+            exit_code = ocrmypdf.ocr(
+                input_path,
+                output_path,
+                language=config.languages,
+                output_type="pdf",
+                deskew=True,
+                skip_text=True,
+                progress_bar=False,
+            )
     except Exception as error:
         raise ExtractionError(f"OCR failed for PDF: {input_path}") from error
 
     if exit_code != ocrmypdf.ExitCode.ok:
         raise ExtractionError(f"OCR failed with exit code {exit_code}: {input_path}")
+
+
+@contextmanager
+def _ocr_log_context(input_path: Path) -> Iterator[None]:
+    logger = logging.getLogger("ocrmypdf")
+    previous_handlers = logger.handlers[:]
+    previous_level = logger.level
+    previous_propagate = logger.propagate
+    previous_disabled = logger.disabled
+
+    handler = logging.StreamHandler()
+    handler.setLevel(logging.WARNING)
+    handler.addFilter(_OcrPathFilter(input_path))
+    handler.setFormatter(logging.Formatter("[OCR %(ocr_path)s] %(message)s"))
+    logger.handlers = [handler]
+    logger.setLevel(logging.WARNING)
+    logger.propagate = False
+    logger.disabled = False
+    try:
+        yield
+    finally:
+        logger.handlers = previous_handlers
+        logger.setLevel(previous_level)
+        logger.propagate = previous_propagate
+        logger.disabled = previous_disabled
 
 
 def _text_length(extracted: ExtractedDocument) -> int:
