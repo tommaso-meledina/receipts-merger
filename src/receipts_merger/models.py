@@ -116,3 +116,30 @@ class MatchDecision(Model):
     status: MatchStatus
     score: ScoreBreakdown | None = None
     reason: str
+
+
+class CandidateMatch(Model):
+    receipt_id: str
+    statement_row_ids: tuple[str, ...]
+    score: ScoreBreakdown
+
+
+class MatchResult(Model):
+    candidates: tuple[CandidateMatch, ...]
+    decisions: tuple[MatchDecision, ...]
+
+
+class MatchOverride(Model):
+    receipt_id: str
+    statement_row_ids: tuple[str, ...] = ()
+    status: MatchStatus
+    reason: str
+
+
+class RunManifest(Model):
+    schema_version: int = 1
+    documents: tuple[Document, ...]
+    receipts: tuple[Receipt, ...]
+    statement_rows: tuple[StatementRow, ...]
+    candidates: tuple[CandidateMatch, ...]
+    decisions: tuple[MatchDecision, ...]
