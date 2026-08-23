@@ -109,9 +109,9 @@ def _amount_score(receipt_total: Money, row: StatementRow) -> int | None:
 def _same_currency_amount_score(left: Money, right: Money) -> int | None:
     difference = abs(left.amount - right.amount)
     if difference == Decimal():
-        return 50
+        return 55
     if difference <= Decimal("0.02"):
-        return 45
+        return 50
     return None
 
 
@@ -125,7 +125,7 @@ def _date_score(
     difference = (statement_date - receipt_date).days
     if difference < -config.days_before or difference > config.days_after:
         return None
-    return max(5, 20 - abs(difference) * 2)
+    return max(5, 25 - abs(difference) * 2)
 
 
 def _merchant_score(receipt_merchant: str | None, description: str) -> int:
@@ -135,7 +135,7 @@ def _merchant_score(receipt_merchant: str | None, description: str) -> int:
         normalize_merchant(receipt_merchant),
         normalize_merchant(description),
     )
-    return round(similarity * 25 / 100)
+    return round(similarity * 15 / 100)
 
 
 def _decide(

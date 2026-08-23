@@ -15,16 +15,50 @@ CURRENCIES = {
     "GBP": "GBP",
     "JPY": "JPY",
     "USD": "USD",
+    "DOLLARI USA": "USD",
+    "DOLLARO USA": "USD",
+    "DOLLARI STATUNITENSI": "USD",
+    "DOLLARO STATUNITENSE": "USD",
+    "US DOLLARS": "USD",
+    "US DOLLAR": "USD",
 }
-CURRENCY_PATTERN = "|".join(re.escape(value) for value in CURRENCIES)
+CURRENCY_PATTERN = "|".join(re.escape(value) for value in sorted(CURRENCIES, key=len, reverse=True))
 AMOUNT_PATTERN = re.compile(
     rf"(?<!\w)(?P<prefix>{CURRENCY_PATTERN})?\s*"
     r"(?P<number>-?\d[\d.,']*[.,]\d{2})"
     rf"(?:\s*(?P<suffix>{CURRENCY_PATTERN}))?(?!\w)",
     re.IGNORECASE,
 )
-ISO_DATE_PATTERN = re.compile(r"\b(?P<year>\d{4})[-/](?P<month>\d{1,2})[-/](?P<day>\d{1,2})\b")
-LOCAL_DATE_PATTERN = re.compile(r"\b(?P<first>\d{1,2})[/-](?P<second>\d{1,2})[/-](?P<year>\d{4})\b")
+ISO_DATE_PATTERN = re.compile(
+    r"\b(?P<year>\d{4})(?P<separator>[-/.])(?P<month>\d{1,2})"
+    r"(?P=separator)(?P<day>\d{1,2})\b"
+)
+LOCAL_DATE_PATTERN = re.compile(
+    r"\b(?P<first>\d{1,2})(?P<separator>[-/.])(?P<second>\d{1,2})"
+    r"(?P=separator)(?P<year>\d{2}|\d{4})\b"
+)
+MONTHS = {
+    "jan": 1,
+    "feb": 2,
+    "mar": 3,
+    "apr": 4,
+    "may": 5,
+    "jun": 6,
+    "jul": 7,
+    "aug": 8,
+    "sep": 9,
+    "oct": 10,
+    "nov": 11,
+    "dec": 12,
+}
+DAY_MONTH_PATTERN = re.compile(
+    r"\b(?P<day>\d{1,2})\s+(?P<month_name>[A-Za-z]{3,9})\s*,?\s*(?P<year>\d{4})\b",
+    re.IGNORECASE,
+)
+MONTH_DAY_PATTERN = re.compile(
+    r"\b(?P<month_name>[A-Za-z]{3,9})\s+(?P<day>\d{1,2})\s*,?\s*(?P<year>\d{4})\b",
+    re.IGNORECASE,
+)
 
 
 @dataclass(frozen=True, slots=True)
@@ -73,6 +107,10 @@ def find_date(text: str, day_first: bool = True) -> DateMatch | None:
         day = values["first"] if day_first else values["second"]
         month = values["second"] if day_first else values["first"]
         value = _date(values["year"], month, day)
+    elif match := DAY_MONTH_PATTERN.search(text) or MONTH_DAY_PATTERN.search(text):
+        values = match.groupdict()
+        month = MONTHS.get(values["month_name"][:3].casefold())
+        value = _date(values["year"], str(month), values["day"]) if month else None
     else:
         return None
     return DateMatch(value, *match.span()) if value else None
@@ -132,6 +170,9 @@ def _decimal(value: str) -> Decimal:
 
 def _date(year: str, month: str, day: str) -> date | None:
     try:
-        return date(int(year), int(month), int(day))
+        numeric_year = int(year)
+        if len(year) == 2:
+            numeric_year += 2000
+        return date(numeric_year, int(month), int(day))
     except ValueError:
         return None

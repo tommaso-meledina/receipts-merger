@@ -19,6 +19,9 @@ def test_parse_localized_money() -> None:
 def test_parse_date_order() -> None:
     assert parse_date("06/07/2026", day_first=True) == date(2026, 7, 6)
     assert parse_date("06/07/2026", day_first=False) == date(2026, 6, 7)
+    assert parse_date("06.07.26", day_first=True) == date(2026, 7, 6)
+    assert parse_date("June 7, 2026") == date(2026, 6, 7)
+    assert parse_date("7 June 2026") == date(2026, 6, 7)
 
 
 def test_parse_receipt_fields() -> None:
@@ -51,4 +54,35 @@ def test_parse_statement_row() -> None:
     assert rows[0].original_amount is not None
     assert rows[0].original_amount.currency == "USD"
     assert rows[0].billed_amount.amount == Decimal("11.42")
+    assert rows[0].billed_amount.currency == "EUR"
+
+
+def test_parse_statement_transaction_and_posting_dates() -> None:
+    extracted = extracted_document(
+        ("16.06.26 17.06.26 EXAMPLE TAXI 11,42",),
+        DocumentKind.STATEMENT,
+    )
+
+    rows = parse_statement(extracted, ParsingConfig())
+
+    assert rows[0].transacted_on == date(2026, 6, 16)
+    assert rows[0].posted_on == date(2026, 6, 17)
+    assert rows[0].description == "EXAMPLE TAXI"
+
+
+def test_parse_original_currency_from_following_line() -> None:
+    extracted = extracted_document(
+        (
+            "16.06.26 17.06.26 EXAMPLE TAXI 12.34 11,42",
+            "Dollari USA",
+            "Exchange rate details",
+        ),
+        DocumentKind.STATEMENT,
+    )
+
+    rows = parse_statement(extracted, ParsingConfig())
+
+    assert rows[0].original_amount is not None
+    assert rows[0].original_amount.currency == "USD"
+    assert rows[0].original_amount.amount == Decimal("12.34")
     assert rows[0].billed_amount.currency == "EUR"
