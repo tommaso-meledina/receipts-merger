@@ -13,11 +13,16 @@ from receipts_merger.models import (
 
 
 def write_pdf(path: Path, lines: tuple[str, ...]) -> None:
+    write_pdf_pages(path, (lines,))
+
+
+def write_pdf_pages(path: Path, pages: tuple[tuple[str, ...], ...]) -> None:
     pdf = FPDF()
-    pdf.add_page()
-    pdf.set_font("Helvetica", size=12)
-    for line in lines:
-        pdf.cell(0, 8, text=line, new_x="LMARGIN", new_y="NEXT")
+    for lines in pages:
+        pdf.add_page()
+        pdf.set_font("Helvetica", size=12)
+        for line in lines:
+            pdf.cell(0, 8, text=line, new_x="LMARGIN", new_y="NEXT")
     pdf.output(path)
 
 
