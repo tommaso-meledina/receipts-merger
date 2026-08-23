@@ -1,15 +1,18 @@
+from io import BytesIO
 from pathlib import Path
 
+import pypdfium2 as pdfium
+from PIL import Image, ImageDraw
 from pypdf import PdfReader, PdfWriter
-from pypdf.annotations import Highlight
-from pypdf.generic import ArrayObject, FloatObject
 
 from receipts_merger.models import (
-    BoundingBox,
     MatchDecision,
     MatchStatus,
     StatementRow,
 )
+
+RENDER_DPI = 200
+ROW_PADDING_POINTS = 2
 
 
 class RenderingError(ValueError):
@@ -22,8 +25,6 @@ def render_composite(
     decision: MatchDecision,
     rows: tuple[StatementRow, ...],
     output_path: Path,
-    *,
-    full_statement: bool = True,
 ) -> None:
     if decision.status is not MatchStatus.ACCEPTED:
         raise RenderingError("only accepted matches can be rendered")
@@ -34,39 +35,31 @@ def render_composite(
     except KeyError as error:
         raise RenderingError(f"unknown statement row ID: {error.args[0]}") from error
 
-    statement_reader = PdfReader(statement_path)
-    page_indices = (
-        tuple(range(len(statement_reader.pages)))
-        if full_statement
-        else tuple(sorted({row.page_index for row in selected_rows}))
-    )
-    page_positions = {source_index: position for position, source_index in enumerate(page_indices)}
+    page_indices = tuple(sorted({row.page_index for row in selected_rows}))
+    selected_ids = {row.id for row in selected_rows}
 
     writer = PdfWriter()
     writer.append(receipt_path)
-    receipt_page_count = len(writer.pages)
-    writer.append(statement_reader, pages=list(page_indices))
-
-    for row in selected_rows:
-        if row.page_index not in page_positions:
-            raise RenderingError(f"statement page is missing: {row.page_index}")
-        output_page_index = receipt_page_count + page_positions[row.page_index]
-        page = writer.pages[output_page_index]
-        rect, quad_points = highlight_geometry(
-            row.source.box,
-            page_height=float(page.cropbox.height),
-            x_offset=float(page.cropbox.left),
-            y_offset=float(page.cropbox.bottom),
-        )
-        writer.add_annotation(
-            page_number=output_page_index,
-            annotation=Highlight(
-                rect=rect,
-                quad_points=quad_points,
-                highlight_color="fff176",
-                printing=True,
-            ),
-        )
+    buffers: list[BytesIO] = []
+    statement_document = pdfium.PdfDocument(statement_path)
+    try:
+        for page_index in page_indices:
+            if page_index >= len(statement_document):
+                raise RenderingError(f"statement page is missing: {page_index}")
+            page_rows = tuple(row for row in rows if row.page_index == page_index)
+            selected_page_rows = tuple(row for row in page_rows if row.id in selected_ids)
+            rasterized = _redact_page(
+                statement_document[page_index],
+                page_rows,
+                selected_page_rows,
+            )
+            buffer = BytesIO()
+            rasterized.save(buffer, format="PDF", resolution=RENDER_DPI)
+            buffer.seek(0)
+            buffers.append(buffer)
+            writer.add_page(PdfReader(buffer).pages[0])
+    finally:
+        statement_document.close()
 
     output_path.parent.mkdir(parents=True, exist_ok=True)
     temporary_path = output_path.with_suffix(f"{output_path.suffix}.tmp")
@@ -75,27 +68,41 @@ def render_composite(
     temporary_path.replace(output_path)
 
 
-def highlight_geometry(
-    box: BoundingBox,
-    page_height: float,
-    x_offset: float = 0,
-    y_offset: float = 0,
-) -> tuple[tuple[float, float, float, float], ArrayObject]:
-    left = x_offset + box.x0
-    right = x_offset + box.x1
-    bottom = y_offset + page_height - box.bottom
-    top = y_offset + page_height - box.top
-    rect = (left, bottom, right, top)
-    quad_points = ArrayObject(
-        [
-            FloatObject(left),
-            FloatObject(top),
-            FloatObject(right),
-            FloatObject(top),
-            FloatObject(left),
-            FloatObject(bottom),
-            FloatObject(right),
-            FloatObject(bottom),
-        ]
+def _redact_page(
+    page: pdfium.PdfPage,
+    rows: tuple[StatementRow, ...],
+    selected_rows: tuple[StatementRow, ...],
+) -> Image.Image:
+    image = page.render(scale=RENDER_DPI / 72).to_pil().convert("RGB")
+    original = image.copy()
+    x_scale = image.width / page.get_width()
+    y_scale = image.height / page.get_height()
+
+    table_top = max(0, min(row.source.box.top for row in rows) - ROW_PADDING_POINTS)
+    table_bottom = min(
+        page.get_height(),
+        max(row.source.box.bottom for row in rows) + ROW_PADDING_POINTS,
     )
-    return rect, quad_points
+    draw = ImageDraw.Draw(image)
+    draw.rectangle(
+        (0, round(table_top * y_scale), image.width, round(table_bottom * y_scale)),
+        fill="black",
+    )
+
+    for row in selected_rows:
+        left = round(max(0, row.source.box.x0 - ROW_PADDING_POINTS) * x_scale)
+        right = round(min(page.get_width(), row.source.box.x1 + ROW_PADDING_POINTS) * x_scale)
+        top = round(max(0, row.source.box.top - ROW_PADDING_POINTS) * y_scale)
+        bottom = round(min(page.get_height(), row.source.box.bottom + ROW_PADDING_POINTS) * y_scale)
+        image.paste(original.crop((left, top, right, bottom)), (left, top))
+        overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
+        overlay_draw = ImageDraw.Draw(overlay)
+        overlay_draw.rectangle(
+            (left, top, right, bottom),
+            fill=(255, 241, 118, 72),
+            outline=(255, 193, 7, 255),
+            width=max(2, round(x_scale)),
+        )
+        image = Image.alpha_composite(image.convert("RGBA"), overlay).convert("RGB")
+
+    return image

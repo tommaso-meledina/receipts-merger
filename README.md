@@ -4,7 +4,8 @@
 
 Receipts Merger is a local CLI that matches scanned paper receipts to credit-card statement
 entries. It creates one reimbursement-ready PDF per accepted match: the original receipt followed
-by the card statement with the relevant transaction highlighted.
+by the relevant statement page with the matching transaction highlighted and unrelated transaction
+rows permanently blacked out.
 
 Matching is deterministic and auditable. Amount, currency, date, merchant, and optional card
 details contribute to a fixed score; weak or competing matches are left for review instead of
@@ -42,8 +43,8 @@ uv run receipts-merger run INPUT_DIRECTORY --output OUTPUT_DIRECTORY
 ```
 
 The statement is detected automatically when unambiguous. Use `--statement PATH` to identify it
-explicitly. Use `--relevant-pages` to append only statement pages containing matched rows instead
-of the full statement.
+explicitly. Each composite includes only statement pages containing matched rows. Those pages are
+rasterized so blacked-out rows cannot be recovered through text extraction or annotation removal.
 
 The output directory contains:
 
@@ -99,6 +100,8 @@ minimum_margin = 10
 
 - The generic statement parser expects selectable text and transaction rows containing a full
   date and amount.
+- Included statement pages are rasterized to make redaction permanent, so their text is not
+  selectable.
 - Receipt OCR quality depends on scan quality and installed Tesseract language data.
 - Unsupported layouts and uncertain matches require review; the application deliberately does
   not force a result.

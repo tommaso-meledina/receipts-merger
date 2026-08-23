@@ -78,10 +78,6 @@ def run(
             help="Optional JSON review overrides.",
         ),
     ] = None,
-    relevant_pages: Annotated[
-        bool,
-        typer.Option(help="Append only statement pages containing matched rows."),
-    ] = False,
 ) -> None:
     try:
         config = AppConfig.from_toml(config_path) if config_path else AppConfig()
@@ -91,7 +87,6 @@ def run(
             config,
             statement_path=statement,
             overrides_path=overrides,
-            full_statement=not relevant_pages,
         )
     except (
         DocumentError,

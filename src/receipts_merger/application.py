@@ -37,7 +37,6 @@ def run_pipeline(
     *,
     statement_path: Path | None = None,
     overrides_path: Path | None = None,
-    full_statement: bool = True,
 ) -> RunSummary:
     paths = discover_pdfs(input_directory)
     explicit_statement = statement_path.resolve() if statement_path else None
@@ -73,7 +72,6 @@ def run_pipeline(
                 decision,
                 statement_rows,
                 output_path,
-                full_statement=full_statement,
             )
 
         manifest = RunManifest(

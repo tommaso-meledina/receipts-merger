@@ -38,6 +38,8 @@ def test_run_end_to_end_with_synthetic_pdfs(tmp_path: Path) -> None:
     assert summary.accepted == 1
     composites = tuple(output_directory.glob("*-composite.pdf"))
     assert len(composites) == 1
-    assert len(PdfReader(composites[0]).pages) == 2
+    composite = PdfReader(composites[0])
+    assert len(composite.pages) == 2
+    assert composite.pages[1].extract_text() in (None, "")
     manifest = read_manifest(output_directory / "manifest.json")
     assert manifest.decisions[0].status is MatchStatus.ACCEPTED
