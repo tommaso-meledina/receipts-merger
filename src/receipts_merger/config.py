@@ -20,10 +20,18 @@ class MatchingConfig(BaseModel):
     minimum_margin: int = Field(default=10, ge=0, le=100)
 
 
+class ParsingConfig(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    day_first: bool = True
+    default_statement_currency: str = Field(default="EUR", pattern=r"^[A-Z]{3}$")
+
+
 class AppConfig(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     ocr: OcrConfig = OcrConfig()
+    parsing: ParsingConfig = ParsingConfig()
     matching: MatchingConfig = MatchingConfig()
 
     @classmethod

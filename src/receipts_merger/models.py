@@ -2,8 +2,9 @@ from datetime import date
 from decimal import Decimal
 from enum import StrEnum
 from pathlib import Path
+from typing import Self
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, model_validator
 
 
 class Model(BaseModel):
@@ -28,6 +29,12 @@ class BoundingBox(Model):
     x1: float = Field(ge=0)
     bottom: float = Field(ge=0)
 
+    @model_validator(mode="after")
+    def validate_edges(self) -> Self:
+        if self.x1 < self.x0 or self.bottom < self.top:
+            raise ValueError("box edges are inverted")
+        return self
+
 
 class SourceSpan(Model):
     document_id: str
@@ -46,6 +53,29 @@ class Document(Model):
     path: Path
     kind: DocumentKind
     page_count: int = Field(gt=0)
+
+
+class Word(Model):
+    text: str
+    box: BoundingBox
+
+
+class ExtractedPage(Model):
+    index: int = Field(ge=0)
+    width: float = Field(gt=0)
+    height: float = Field(gt=0)
+    words: tuple[Word, ...]
+
+    @property
+    def text(self) -> str:
+        return " ".join(word.text for word in self.words)
+
+
+class ExtractedDocument(Model):
+    document: Document
+    pages: tuple[ExtractedPage, ...]
+    working_path: Path
+    ocr_applied: bool = False
 
 
 class Receipt(Model):
