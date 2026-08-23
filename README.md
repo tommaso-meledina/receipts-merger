@@ -44,7 +44,8 @@ uv run receipts-merger run INPUT_DIRECTORY --output OUTPUT_DIRECTORY
 
 The statement is detected automatically when unambiguous. Use `--statement PATH` to identify it
 explicitly. Each composite includes only statement pages containing matched rows. Those pages are
-rasterized so blacked-out rows cannot be recovered through text extraction or annotation removal.
+rasterized after unrelated transaction text is individually blacked out, preserving the surrounding
+layout while preventing recovery through text extraction or annotation removal.
 
 The output directory contains:
 

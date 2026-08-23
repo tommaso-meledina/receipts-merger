@@ -97,6 +97,7 @@ class StatementRow(Model):
     original_amount: Money | None = None
     billed_amount: Money
     source: SourceSpan
+    redaction_boxes: tuple[BoundingBox, ...] = ()
 
 
 class ScoreBreakdown(Model):

@@ -6,6 +6,7 @@ from PIL import Image, ImageDraw
 from pypdf import PdfReader, PdfWriter
 
 from receipts_merger.models import (
+    BoundingBox,
     MatchDecision,
     MatchStatus,
     StatementRow,
@@ -13,6 +14,7 @@ from receipts_merger.models import (
 
 RENDER_DPI = 200
 ROW_PADDING_POINTS = 2
+WORD_PADDING_POINTS = 0.75
 
 
 class RenderingError(ValueError):
@@ -74,31 +76,39 @@ def _redact_page(
     selected_rows: tuple[StatementRow, ...],
 ) -> Image.Image:
     image = page.render(scale=RENDER_DPI / 72).to_pil().convert("RGB")
-    original = image.copy()
     x_scale = image.width / page.get_width()
     y_scale = image.height / page.get_height()
+    selected_ids = {row.id for row in selected_rows}
 
-    table_top = max(0, min(row.source.box.top for row in rows) - ROW_PADDING_POINTS)
-    table_bottom = min(
-        page.get_height(),
-        max(row.source.box.bottom for row in rows) + ROW_PADDING_POINTS,
-    )
     draw = ImageDraw.Draw(image)
-    draw.rectangle(
-        (0, round(table_top * y_scale), image.width, round(table_bottom * y_scale)),
-        fill="black",
-    )
+    for row in rows:
+        if row.id in selected_ids:
+            continue
+        boxes = row.redaction_boxes or (row.source.box,)
+        for box in boxes:
+            draw.rectangle(
+                _pixel_box(
+                    box,
+                    page,
+                    x_scale,
+                    y_scale,
+                    WORD_PADDING_POINTS,
+                ),
+                fill="black",
+            )
 
     for row in selected_rows:
-        left = round(max(0, row.source.box.x0 - ROW_PADDING_POINTS) * x_scale)
-        right = round(min(page.get_width(), row.source.box.x1 + ROW_PADDING_POINTS) * x_scale)
-        top = round(max(0, row.source.box.top - ROW_PADDING_POINTS) * y_scale)
-        bottom = round(min(page.get_height(), row.source.box.bottom + ROW_PADDING_POINTS) * y_scale)
-        image.paste(original.crop((left, top, right, bottom)), (left, top))
+        highlight_box = _pixel_box(
+            row.source.box,
+            page,
+            x_scale,
+            y_scale,
+            ROW_PADDING_POINTS,
+        )
         overlay = Image.new("RGBA", image.size, (0, 0, 0, 0))
         overlay_draw = ImageDraw.Draw(overlay)
         overlay_draw.rectangle(
-            (left, top, right, bottom),
+            highlight_box,
             fill=(255, 241, 118, 72),
             outline=(255, 193, 7, 255),
             width=max(2, round(x_scale)),
@@ -106,3 +116,18 @@ def _redact_page(
         image = Image.alpha_composite(image.convert("RGBA"), overlay).convert("RGB")
 
     return image
+
+
+def _pixel_box(
+    box: BoundingBox,
+    page: pdfium.PdfPage,
+    x_scale: float,
+    y_scale: float,
+    padding: float,
+) -> tuple[int, int, int, int]:
+    return (
+        round(max(0, box.x0 - padding) * x_scale),
+        round(max(0, box.top - padding) * y_scale),
+        round(min(page.get_width(), box.x1 + padding) * x_scale),
+        round(min(page.get_height(), box.bottom + padding) * y_scale),
+    )

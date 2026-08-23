@@ -44,9 +44,13 @@ def parse_statement(
             )
             billed_amount = money_matches[-1].money
             original_amount = money_matches[0].money if len(money_matches) > 1 else None
+            continuation_lines = _continuation_lines(
+                lines[line_index + 1 : line_index + 3],
+                config.day_first,
+            )
             if original_amount and (
                 original_currency := _following_currency(
-                    lines[line_index + 1 : line_index + 3],
+                    continuation_lines,
                     config.default_statement_currency,
                 )
             ):
@@ -62,6 +66,11 @@ def parse_statement(
                     original_amount=original_amount,
                     billed_amount=billed_amount,
                     source=source,
+                    redaction_boxes=tuple(
+                        word.box
+                        for source_line in (line, *continuation_lines)
+                        for word in source_line.words
+                    ),
                 )
             )
     return tuple(rows)
@@ -75,9 +84,19 @@ def _following_currency(
         currency = infer_currency(line.text)
         if currency and currency != default_currency:
             return currency
-        if find_date(line.text):
-            break
     return None
+
+
+def _continuation_lines(
+    lines: tuple[TextLine, ...],
+    day_first: bool,
+) -> tuple[TextLine, ...]:
+    continuation: list[TextLine] = []
+    for line in lines:
+        if find_date(line.text, day_first):
+            break
+        continuation.append(line)
+    return tuple(continuation)
 
 
 def _row_id(document_id: str, page_index: int, top: float, text: str) -> str:

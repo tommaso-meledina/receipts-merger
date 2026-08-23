@@ -55,6 +55,7 @@ def test_parse_statement_row() -> None:
     assert rows[0].original_amount.currency == "USD"
     assert rows[0].billed_amount.amount == Decimal("11.42")
     assert rows[0].billed_amount.currency == "EUR"
+    assert len(rows[0].redaction_boxes) == 7
 
 
 def test_parse_statement_transaction_and_posting_dates() -> None:
@@ -86,3 +87,4 @@ def test_parse_original_currency_from_following_line() -> None:
     assert rows[0].original_amount.currency == "USD"
     assert rows[0].original_amount.amount == Decimal("12.34")
     assert rows[0].billed_amount.currency == "EUR"
+    assert len(rows[0].redaction_boxes) == 11
