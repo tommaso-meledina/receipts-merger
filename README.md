@@ -3,9 +3,9 @@
 ## What's Receipts Merger?
 
 Receipts Merger is a local CLI that matches scanned paper receipts to credit-card statement
-entries. It creates one reimbursement-ready PDF per accepted match: the original receipt followed
-by the relevant statement page with the matching transaction highlighted and unrelated transaction
-rows permanently blacked out.
+entries. It outputs a complete reimbursement-ready collection using the original receipt filenames.
+Foreign-currency matches are enriched with the relevant statement page, while all other receipts
+are copied unchanged.
 
 Matching is deterministic and auditable. Amount, currency, date, merchant, and optional card
 details contribute to a fixed score; weak or competing matches are left for review instead of
@@ -43,14 +43,20 @@ uv run receipts-merger run INPUT_DIRECTORY --output OUTPUT_DIRECTORY
 ```
 
 The statement is detected automatically when unambiguous. Use `--statement PATH` to identify it
-explicitly. Each composite includes only statement pages containing matched rows. Those pages are
-rasterized after unrelated transaction text is individually blacked out, preserving the surrounding
-layout while preventing recovery through text extraction or annotation removal.
+explicitly. By default, only accepted matches whose receipt and billed statement currencies differ
+are enriched. Pass `--include-same-currency` to enrich accepted same-currency matches too.
+
+Enhanced PDFs include only statement pages containing matched rows. Those pages are rasterized
+after unrelated transaction text is individually blacked out, preserving the surrounding layout
+while preventing recovery through text extraction or annotation removal.
 
 The output directory contains:
 
-- one `*-composite.pdf` for each accepted match;
+- one PDF for every input receipt, using its original filename;
 - `manifest.json`, containing extracted fields, candidate scores, decisions, and unmatched items.
+
+The source statement is not copied into the collection. Receipts that are unmatched, ambiguous, or
+not eligible for enrichment are copied byte-for-byte.
 
 Run `uv run receipts-merger --help` or `uv run receipts-merger run --help` for all options.
 

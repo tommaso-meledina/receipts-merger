@@ -78,6 +78,10 @@ def run(
             help="Optional JSON review overrides.",
         ),
     ] = None,
+    include_same_currency: Annotated[
+        bool,
+        typer.Option(help="Enhance accepted same-currency matches too."),
+    ] = False,
 ) -> None:
     try:
         config = AppConfig.from_toml(config_path) if config_path else AppConfig()
@@ -87,6 +91,7 @@ def run(
             config,
             statement_path=statement,
             overrides_path=overrides,
+            include_same_currency=include_same_currency,
         )
     except (
         DocumentError,
@@ -104,7 +109,9 @@ def run(
         f"Processed {summary.receipts} receipts: "
         f"{summary.accepted} accepted, "
         f"{summary.ambiguous} ambiguous, "
-        f"{summary.unmatched} unmatched."
+        f"{summary.unmatched} unmatched; "
+        f"{summary.enhanced} enhanced, "
+        f"{summary.copied} copied unchanged."
     )
 
 
