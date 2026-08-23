@@ -19,6 +19,8 @@ def test_parse_localized_money() -> None:
 def test_parse_date_order() -> None:
     assert parse_date("06/07/2026", day_first=True) == date(2026, 7, 6)
     assert parse_date("06/07/2026", day_first=False) == date(2026, 6, 7)
+    assert parse_date("06/16/2026", day_first=True) == date(2026, 6, 16)
+    assert parse_date("16/06/2026", day_first=False) == date(2026, 6, 16)
     assert parse_date("06.07.26", day_first=True) == date(2026, 7, 6)
     assert parse_date("June 7, 2026") == date(2026, 6, 7)
     assert parse_date("7 June 2026") == date(2026, 6, 7)

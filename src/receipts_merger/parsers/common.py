@@ -107,6 +107,8 @@ def find_date(text: str, day_first: bool = True) -> DateMatch | None:
         day = values["first"] if day_first else values["second"]
         month = values["second"] if day_first else values["first"]
         value = _date(values["year"], month, day)
+        if value is None:
+            value = _date(values["year"], day, month)
     elif match := DAY_MONTH_PATTERN.search(text) or MONTH_DAY_PATTERN.search(text):
         values = match.groupdict()
         month = MONTHS.get(values["month_name"][:3].casefold())
