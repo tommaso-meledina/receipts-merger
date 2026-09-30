@@ -58,25 +58,37 @@ def _extract_text(path: Path, document: Document) -> ExtractedDocument:
 
 
 def _extract_page(index: int, page: Any) -> ExtractedPage:
+    width = float(page.width)
+    height = float(page.height)
     words = tuple(
         Word(
             text=str(word["text"]),
-            box=BoundingBox(
-                x0=float(word["x0"]),
-                top=float(word["top"]),
-                x1=float(word["x1"]),
-                bottom=float(word["bottom"]),
-            ),
+            box=_bounded_box(word, width, height),
         )
         for word in page.extract_words(keep_blank_chars=False)
         if word["text"].strip()
     )
     return ExtractedPage(
         index=index,
-        width=float(page.width),
-        height=float(page.height),
+        width=width,
+        height=height,
         words=words,
     )
+
+
+def _bounded_box(word: dict[str, Any], width: float, height: float) -> BoundingBox:
+    x0 = _clamp(float(word["x0"]), width)
+    top = _clamp(float(word["top"]), height)
+    return BoundingBox(
+        x0=x0,
+        top=top,
+        x1=max(x0, _clamp(float(word["x1"]), width)),
+        bottom=max(top, _clamp(float(word["bottom"]), height)),
+    )
+
+
+def _clamp(value: float, maximum: float) -> float:
+    return min(max(value, 0), maximum)
 
 
 def _run_ocr(input_path: Path, output_path: Path, config: OcrConfig) -> None:

@@ -6,7 +6,7 @@ import pytest
 
 from receipts_merger.config import OcrConfig
 from receipts_merger.documents import DocumentError, discover_pdfs, inventory_document
-from receipts_merger.extraction import _run_ocr, extract_document
+from receipts_merger.extraction import _bounded_box, _run_ocr, extract_document
 from receipts_merger.models import DocumentKind
 from tests.helpers import write_pdf
 
@@ -48,6 +48,28 @@ def test_extract_native_text_without_ocr(tmp_path: Path) -> None:
     assert extracted.ocr_applied is False
     assert extracted.document.kind is DocumentKind.RECEIPT
     assert "Example" in extracted.pages[0].text
+
+
+def test_word_box_is_clamped_to_page_bounds() -> None:
+    box = _bounded_box(
+        {"x0": -1.5, "top": -2, "x1": 101, "bottom": 202},
+        width=100,
+        height=200,
+    )
+
+    assert box.model_dump() == {
+        "x0": 0,
+        "top": 0,
+        "x1": 100,
+        "bottom": 200,
+    }
+    collapsed = _bounded_box(
+        {"x0": 120, "top": 220, "x1": -1, "bottom": -1},
+        width=100,
+        height=200,
+    )
+    assert collapsed.x0 == collapsed.x1 == 100
+    assert collapsed.top == collapsed.bottom == 200
 
 
 def test_ocr_warnings_include_input_path(
