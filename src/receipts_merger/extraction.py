@@ -103,6 +103,8 @@ def _run_ocr(input_path: Path, output_path: Path, config: OcrConfig) -> None:
                 language=config.languages,
                 output_type="pdf",
                 deskew=True,
+                rotate_pages=True,
+                rotate_pages_threshold=config.rotation_threshold,
                 skip_text=True,
                 progress_bar=False,
             )

@@ -24,9 +24,9 @@ CURRENCIES = {
 }
 CURRENCY_PATTERN = "|".join(re.escape(value) for value in sorted(CURRENCIES, key=len, reverse=True))
 AMOUNT_PATTERN = re.compile(
-    rf"(?<!\w)(?P<prefix>{CURRENCY_PATTERN})?\s*"
-    r"(?P<number>-?\d[\d.,']*[.,]\d{2})"
-    rf"(?:\s*(?P<suffix>{CURRENCY_PATTERN}))?(?!\w)",
+    rf"(?<![\w./-])(?P<prefix>{CURRENCY_PATTERN})?\s*"
+    r"(?P<number>-?\d[\d.,']*[.,]\d{1,2})"
+    rf"(?:\s*(?P<suffix>{CURRENCY_PATTERN}))?(?![\w./-])",
     re.IGNORECASE,
 )
 ISO_DATE_PATTERN = re.compile(

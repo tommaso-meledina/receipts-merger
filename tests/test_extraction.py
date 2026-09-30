@@ -80,8 +80,10 @@ def test_ocr_warnings_include_input_path(
     input_path = tmp_path / "scanned receipt.pdf"
     logger = logging.getLogger("ocrmypdf")
     previous_handlers = logger.handlers[:]
+    options: dict[str, object] = {}
 
     def fake_ocr(*args: object, **kwargs: object) -> ocrmypdf.ExitCode:
+        options.update(kwargs)
         logging.getLogger("ocrmypdf._exec.tesseract").warning("possibly poor OCR")
         logging.getLogger("ocrmypdf.optimize").warning("image left unchanged")
         return ocrmypdf.ExitCode.ok
@@ -94,3 +96,5 @@ def test_ocr_warnings_include_input_path(
     assert f"[OCR {input_path}] possibly poor OCR" in stderr
     assert f"[OCR {input_path}] image left unchanged" in stderr
     assert logger.handlers == previous_handlers
+    assert options["rotate_pages"] is True
+    assert options["rotate_pages_threshold"] == 2

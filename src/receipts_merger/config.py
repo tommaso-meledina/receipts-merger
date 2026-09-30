@@ -9,6 +9,7 @@ class OcrConfig(BaseModel):
 
     languages: tuple[str, ...] = ("eng",)
     minimum_text_characters: int = Field(default=40, ge=0)
+    rotation_threshold: float = Field(default=2, ge=0)
 
 
 class MatchingConfig(BaseModel):

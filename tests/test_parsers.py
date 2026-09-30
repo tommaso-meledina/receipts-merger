@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from pathlib import Path
 
 from receipts_merger.config import ParsingConfig
 from receipts_merger.models import DocumentKind
@@ -11,9 +12,13 @@ from tests.helpers import extracted_document
 def test_parse_localized_money() -> None:
     european = find_money("Total EUR 1.234,56")
     american = find_money("Total USD 1,234.56")
+    shortened = find_money("Total $17.5")
+    numeric_date = find_money("Date 09.08.2026", "USD")
 
     assert european[0].money.amount == Decimal("1234.56")
     assert american[0].money.amount == Decimal("1234.56")
+    assert shortened[0].money.amount == Decimal("17.5")
+    assert numeric_date == ()
 
 
 def test_parse_date_order() -> None:
@@ -40,6 +45,27 @@ def test_parse_receipt_fields() -> None:
     assert receipt.total.amount == Decimal("12.34")
     assert receipt.total.currency == "USD"
     assert len(receipt.sources) == 3
+
+
+def test_parse_receipt_uses_filename_date_and_default_currency() -> None:
+    extracted = extracted_document(
+        ("Example Cafe", "Date 09/08/2026", "Total 17.5"),
+        DocumentKind.RECEIPT,
+    )
+    extracted = extracted.model_copy(
+        update={
+            "document": extracted.document.model_copy(
+                update={"path": Path("20260908-example-cafe.pdf")}
+            )
+        }
+    )
+
+    receipt = parse_receipt(extracted, ParsingConfig(), default_currency="USD")
+
+    assert receipt.purchased_on == date(2026, 9, 8)
+    assert receipt.total is not None
+    assert receipt.total.amount == Decimal("17.5")
+    assert receipt.total.currency == "USD"
 
 
 def test_parse_statement_row() -> None:

@@ -1,4 +1,6 @@
 import re
+from datetime import date
+from pathlib import Path
 
 from receipts_merger.config import ParsingConfig
 from receipts_merger.models import ExtractedDocument, Money, Receipt, SourceSpan
@@ -22,9 +24,14 @@ CARD_SUFFIX = re.compile(
     r"(?:ending(?:\s+in)?|last\s*4|[*xX]{2,})\s*[:#-]?\s*(\d{4})",
     re.IGNORECASE,
 )
+FILENAME_DATE = re.compile(r"^(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})(?:\D|$)")
 
 
-def parse_receipt(extracted: ExtractedDocument, config: ParsingConfig) -> Receipt:
+def parse_receipt(
+    extracted: ExtractedDocument,
+    config: ParsingConfig,
+    default_currency: str | None = None,
+) -> Receipt:
     page_lines = tuple(
         (page.index, line)
         for page in extracted.pages
@@ -32,13 +39,13 @@ def parse_receipt(extracted: ExtractedDocument, config: ParsingConfig) -> Receip
         if line.text.strip()
     )
     full_text = "\n".join(line.text for _, line in page_lines)
-    currency = infer_currency(full_text)
+    currency = infer_currency(full_text) or default_currency
 
     merchant_match = next(
         ((page_index, line) for page_index, line in page_lines if _is_merchant_candidate(line)),
         None,
     )
-    date_match = next(
+    text_date_match = next(
         (
             (page_index, line, parsed)
             for page_index, line in page_lines
@@ -47,23 +54,36 @@ def parse_receipt(extracted: ExtractedDocument, config: ParsingConfig) -> Receip
         None,
     )
     total_match = _find_total(page_lines, currency)
+    purchased_on = _filename_date(extracted.document.path) or (
+        text_date_match[2] if text_date_match else None
+    )
 
     sources = tuple(
         _source(extracted, page_index, line)
         for page_index, line in _unique_lines(
             merchant_match,
-            date_match[:2] if date_match else None,
+            text_date_match[:2] if text_date_match else None,
             total_match[:2] if total_match else None,
         )
     )
     return Receipt(
         document_id=extracted.document.id,
         merchant=merchant_match[1].text if merchant_match else None,
-        purchased_on=date_match[2] if date_match else None,
+        purchased_on=purchased_on,
         total=total_match[2] if total_match else None,
         card_suffix=card_match.group(1) if (card_match := CARD_SUFFIX.search(full_text)) else None,
         sources=sources,
     )
+
+
+def _filename_date(path: Path) -> date | None:
+    match = FILENAME_DATE.match(path.stem)
+    if not match:
+        return None
+    try:
+        return date(*(int(match[name]) for name in ("year", "month", "day")))
+    except ValueError:
+        return None
 
 
 def _find_total(

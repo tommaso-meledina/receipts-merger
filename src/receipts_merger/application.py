@@ -1,3 +1,4 @@
+from collections import Counter
 from dataclasses import dataclass
 from pathlib import Path
 from shutil import copyfile
@@ -58,10 +59,14 @@ def run_pipeline(
             extract_document(path, Path(work_directory), config.ocr) for path in paths
         )
         statement, receipt_documents = _select_documents(extracted, explicit_statement)
-        receipts = tuple(parse_receipt(document, config.parsing) for document in receipt_documents)
         statement_rows = parse_statement(statement, config.parsing)
         if not statement_rows:
             raise PipelineError("the statement contains no parseable transaction rows")
+        default_receipt_currency = _default_receipt_currency(statement_rows)
+        receipts = tuple(
+            parse_receipt(document, config.parsing, default_receipt_currency)
+            for document in receipt_documents
+        )
 
         result = match_receipts(receipts, statement_rows, config.matching)
         if overrides_path:
@@ -182,6 +187,18 @@ def _should_enhance(
         row.id in selected_ids and row.billed_amount.currency != receipt.total.currency
         for row in rows
     )
+
+
+def _default_receipt_currency(rows: tuple[StatementRow, ...]) -> str | None:
+    counts = Counter(
+        row.original_amount.currency for row in rows if row.original_amount is not None
+    )
+    if not counts:
+        return None
+    ordered = counts.most_common(2)
+    if len(ordered) > 1 and ordered[0][1] == ordered[1][1]:
+        return None
+    return ordered[0][0]
 
 
 def _copy_pdf(source: Path, destination: Path) -> None:
