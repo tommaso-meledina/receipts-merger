@@ -179,10 +179,15 @@ def _should_enhance(
         return False
     if include_same_currency:
         return True
-    if receipt.total is None:
-        return False
 
     selected_ids = set(decision.statement_row_ids)
+    if receipt.total is None:
+        return any(
+            row.id in selected_ids
+            and row.original_amount is not None
+            and row.original_amount.currency != row.billed_amount.currency
+            for row in rows
+        )
     return any(
         row.id in selected_ids and row.billed_amount.currency != receipt.total.currency
         for row in rows

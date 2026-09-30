@@ -17,14 +17,15 @@ TOTAL_LABEL = re.compile(
     re.IGNORECASE,
 )
 NON_MERCHANT = re.compile(
-    r"\b(?:invoice|receipt|order|tax|date|total|amount|payment)\b",
+    r"\b(?:invoice|receipt|order|tax|date|total|amount|payment|welcome|percorso)\b",
     re.IGNORECASE,
 )
+MERCHANT_FIELD = re.compile(r"^(?:location|merchant|store)\s*[:#-]\s*(.+)$", re.IGNORECASE)
 CARD_SUFFIX = re.compile(
     r"(?:ending(?:\s+in)?|last\s*4|[*xX]{2,})\s*[:#-]?\s*(\d{4})",
     re.IGNORECASE,
 )
-FILENAME_DATE = re.compile(r"^(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})(?:\D|$)")
+FILENAME_DATE = re.compile(r"^(?P<year>\d{4})(?P<month>\d{2})(?P<day>\d{2})(?=\D|$)")
 
 
 def parse_receipt(
@@ -41,10 +42,26 @@ def parse_receipt(
     full_text = "\n".join(line.text for _, line in page_lines)
     currency = infer_currency(full_text) or default_currency
 
+    merchant_field_match = next(
+        (
+            (page_index, line, field.group(1).strip())
+            for page_index, line in page_lines
+            if (field := MERCHANT_FIELD.match(line.text))
+            and _is_merchant_candidate(line, field.group(1))
+        ),
+        None,
+    )
     merchant_match = next(
         ((page_index, line) for page_index, line in page_lines if _is_merchant_candidate(line)),
         None,
     )
+    if merchant_field_match:
+        merchant_source = merchant_field_match[:2]
+        merchant = merchant_field_match[2]
+    else:
+        merchant_source = merchant_match
+        merchant = merchant_match[1].text if merchant_match else None
+    filename_hint = _filename_hint(extracted.document.path)
     text_date_match = next(
         (
             (page_index, line, parsed)
@@ -61,14 +78,15 @@ def parse_receipt(
     sources = tuple(
         _source(extracted, page_index, line)
         for page_index, line in _unique_lines(
-            merchant_match,
+            merchant_source,
             text_date_match[:2] if text_date_match else None,
             total_match[:2] if total_match else None,
         )
     )
     return Receipt(
         document_id=extracted.document.id,
-        merchant=merchant_match[1].text if merchant_match else None,
+        merchant=merchant,
+        merchant_hint=filename_hint,
         purchased_on=purchased_on,
         total=total_match[2] if total_match else None,
         card_suffix=card_match.group(1) if (card_match := CARD_SUFFIX.search(full_text)) else None,
@@ -86,6 +104,14 @@ def _filename_date(path: Path) -> date | None:
         return None
 
 
+def _filename_hint(path: Path) -> str | None:
+    match = FILENAME_DATE.match(path.stem)
+    if not match:
+        return None
+    hint = re.sub(r"[_-]+", " ", path.stem[match.end() :]).strip()
+    return hint or None
+
+
 def _find_total(
     page_lines: tuple[tuple[int, TextLine], ...], currency: str | None
 ) -> tuple[int, TextLine, Money] | None:
@@ -99,12 +125,13 @@ def _find_total(
     return max(pool, key=lambda candidate: candidate[2].amount) if pool else None
 
 
-def _is_merchant_candidate(line: TextLine) -> bool:
+def _is_merchant_candidate(line: TextLine, text: str | None = None) -> bool:
+    text = text or line.text
     return (
-        len(line.text) <= 120
-        and len(re.findall(r"[^\W\d_]", line.text, re.UNICODE)) >= 3
-        and not NON_MERCHANT.search(line.text)
-        and parse_date(line.text) is None
+        len(text) <= 120
+        and len(re.findall(r"[^\W\d_]", text, re.UNICODE)) >= 3
+        and not NON_MERCHANT.search(text)
+        and parse_date(text) is None
     )
 
 

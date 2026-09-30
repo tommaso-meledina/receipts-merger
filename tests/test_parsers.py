@@ -68,6 +68,34 @@ def test_parse_receipt_uses_filename_date_and_default_currency() -> None:
     assert receipt.total.currency == "USD"
 
 
+def test_parse_receipt_uses_explicit_merchant_field() -> None:
+    extracted = extracted_document(
+        ("WELCOME", "Location: Example Cafe", "Date 16/06/2026", "Total USD 12.34"),
+        DocumentKind.RECEIPT,
+    )
+
+    receipt = parse_receipt(extracted, ParsingConfig())
+
+    assert receipt.merchant == "Example Cafe"
+
+
+def test_parse_receipt_extracts_filename_merchant_hint() -> None:
+    extracted = extracted_document(
+        ("PERCORSO", "DA PIACENZA"),
+        DocumentKind.RECEIPT,
+    )
+    extracted = extracted.model_copy(
+        update={
+            "document": extracted.document.model_copy(update={"path": Path("20260616-taxi.pdf")})
+        }
+    )
+
+    receipt = parse_receipt(extracted, ParsingConfig())
+
+    assert receipt.merchant == "DA PIACENZA"
+    assert receipt.merchant_hint == "taxi"
+
+
 def test_parse_statement_row() -> None:
     extracted = extracted_document(
         ("Transactions", "16/06/2026 EXAMPLE TAXI USD 12.34 EUR 11.42"),

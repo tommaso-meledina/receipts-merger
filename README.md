@@ -89,6 +89,7 @@ Pass a TOML file with `--config PATH` to adjust OCR and matching behavior:
 ```toml
 [ocr]
 languages = ["eng"]
+rotation_threshold = 2
 
 [parsing]
 day_first = true
@@ -98,8 +99,13 @@ default_statement_currency = "EUR"
 days_before = 3
 days_after = 10
 acceptance_score = 80
+incomplete_acceptance_score = 35
 minimum_margin = 10
 ```
+
+Dates and merchant hints in filenames such as `20260908-example-cafe.pdf` are used when OCR is
+ambiguous. The statement's dominant original currency is used for receipts that omit a currency
+symbol.
 
 ---
 

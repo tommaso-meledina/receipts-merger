@@ -18,6 +18,7 @@ class MatchingConfig(BaseModel):
     days_before: int = Field(default=3, ge=0)
     days_after: int = Field(default=10, ge=0)
     acceptance_score: int = Field(default=80, ge=0, le=100)
+    incomplete_acceptance_score: int = Field(default=35, ge=0, le=100)
     minimum_margin: int = Field(default=10, ge=0, le=100)
 
 

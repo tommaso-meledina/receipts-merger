@@ -81,6 +81,7 @@ class ExtractedDocument(Model):
 class Receipt(Model):
     document_id: str
     merchant: str | None = None
+    merchant_hint: str | None = None
     purchased_on: date | None = None
     total: Money | None = None
     card_suffix: str | None = Field(default=None, pattern=r"^\d{4}$")

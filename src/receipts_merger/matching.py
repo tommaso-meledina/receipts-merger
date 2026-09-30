@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import date
 from decimal import Decimal
 
-from rapidfuzz.fuzz import token_set_ratio
+from rapidfuzz.fuzz import WRatio, token_set_ratio
 
 from receipts_merger.config import MatchingConfig
 from receipts_merger.models import (
@@ -44,7 +44,7 @@ def rank_candidates(
     rows: tuple[StatementRow, ...],
     config: MatchingConfig,
 ) -> tuple[CandidateMatch, ...]:
-    if receipt.total is None or receipt.purchased_on is None:
+    if receipt.purchased_on is None or not (receipt.merchant or receipt.merchant_hint):
         return ()
 
     candidates = [
@@ -65,7 +65,7 @@ def normalize_merchant(value: str) -> str:
     )
     normalized = NON_ALPHANUMERIC.sub(" ", normalized)
     normalized = MERCHANT_NOISE.sub(" ", normalized)
-    return " ".join(normalized.split())
+    return " ".join(token for token in normalized.split() if len(token) > 1)
 
 
 def _score(
@@ -73,15 +73,15 @@ def _score(
     row: StatementRow,
     config: MatchingConfig,
 ) -> CandidateMatch | None:
-    if receipt.total is None or receipt.purchased_on is None:
+    if receipt.purchased_on is None:
         return None
-    amount_score = _amount_score(receipt.total, row)
+    amount_score = _amount_score(receipt.total, row) if receipt.total else 0
     row_date = row.transacted_on or row.posted_on
     date_score = _date_score(receipt.purchased_on, row_date, config)
     if amount_score is None or date_score is None:
         return None
 
-    merchant_score = _merchant_score(receipt.merchant, row.description)
+    merchant_score = _merchant_score(receipt.merchant, row.description, receipt.merchant_hint)
     card_score = 5 if receipt.card_suffix and receipt.card_suffix in row.description else 0
     return CandidateMatch(
         receipt_id=receipt.document_id,
@@ -112,6 +112,13 @@ def _same_currency_amount_score(left: Money, right: Money) -> int | None:
         return 55
     if difference <= Decimal("0.02"):
         return 50
+    relative_difference = difference / max(
+        abs(left.amount),
+        abs(right.amount),
+        Decimal("0.01"),
+    )
+    if difference <= Decimal("0.50") and relative_difference <= Decimal("0.02"):
+        return 50
     return None
 
 
@@ -125,15 +132,24 @@ def _date_score(
     difference = (statement_date - receipt_date).days
     if difference < -config.days_before or difference > config.days_after:
         return None
-    return max(5, 25 - abs(difference) * 2)
+    return max(10, 25 - abs(difference) * 10)
 
 
-def _merchant_score(receipt_merchant: str | None, description: str) -> int:
+def _merchant_score(
+    receipt_merchant: str | None,
+    description: str,
+    merchant_hint: str | None,
+) -> int:
+    normalized_description = normalize_merchant(description)
+    normalized_hint = normalize_merchant(merchant_hint) if merchant_hint else ""
+    if normalized_hint and normalized_hint in normalized_description.split():
+        return 15
     if not receipt_merchant:
         return 0
-    similarity = token_set_ratio(
-        normalize_merchant(receipt_merchant),
-        normalize_merchant(description),
+    normalized_receipt = normalize_merchant(receipt_merchant)
+    similarity = max(
+        token_set_ratio(normalized_receipt, normalized_description),
+        WRatio(normalized_receipt, normalized_description),
     )
     return round(similarity * 15 / 100)
 
@@ -143,11 +159,11 @@ def _decide(
     candidates: tuple[CandidateMatch, ...],
     config: MatchingConfig,
 ) -> MatchDecision:
-    if receipt.total is None or receipt.purchased_on is None or not receipt.merchant:
+    if receipt.purchased_on is None or not (receipt.merchant or receipt.merchant_hint):
         return MatchDecision(
             receipt_id=receipt.document_id,
             status=MatchStatus.UNMATCHED,
-            reason="receipt is missing merchant, date, or total",
+            reason="receipt is missing merchant or date",
         )
     if not candidates:
         return MatchDecision(
@@ -157,7 +173,10 @@ def _decide(
         )
 
     best = candidates[0]
-    if best.score.total < config.acceptance_score:
+    acceptance_score = (
+        config.incomplete_acceptance_score if receipt.total is None else config.acceptance_score
+    )
+    if best.score.total < acceptance_score:
         return MatchDecision(
             receipt_id=receipt.document_id,
             statement_row_ids=best.statement_row_ids,

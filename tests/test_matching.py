@@ -45,6 +45,74 @@ def test_exclude_row_outside_date_window() -> None:
     assert result.candidates == ()
 
 
+def test_accept_small_ocr_amount_error_with_exact_date_and_merchant() -> None:
+    receipt = make_receipt("receipt-1", "HBSSPECT", "USD", "13.50")
+    row = make_row(
+        "row-1",
+        "HBS SPANGLER FOOD COURT",
+        "EUR",
+        "11.70",
+        original=("USD", "13.25"),
+    )
+
+    result = match_receipts((receipt,), (row,), MatchingConfig())
+
+    assert result.decisions[0].status is MatchStatus.ACCEPTED
+    assert result.decisions[0].score is not None
+    assert result.decisions[0].score.amount == 50
+
+
+def test_accept_unique_exact_date_and_merchant_without_total() -> None:
+    receipt = Receipt(
+        document_id="receipt-1",
+        merchant="unreliable OCR",
+        merchant_hint="taxi",
+        purchased_on=date(2026, 6, 16),
+    )
+    rows = (
+        make_row("row-1", "TAXI PIACENZA", "EUR", "130.00"),
+        make_row(
+            "row-2",
+            "OTHER MERCHANT",
+            "EUR",
+            "20.00",
+        ),
+    )
+
+    result = match_receipts((receipt,), rows, MatchingConfig())
+
+    assert result.decisions[0].status is MatchStatus.ACCEPTED
+    assert result.decisions[0].statement_row_ids == ("row-1",)
+    assert result.decisions[0].score is not None
+    assert result.decisions[0].score.total == 40
+
+
+def test_exact_transaction_date_clears_minimum_margin() -> None:
+    receipt = make_receipt("receipt-1", "Example Cafe", "USD", "12.34")
+    rows = (
+        make_row(
+            "row-1",
+            "EXAMPLE CAFE",
+            "EUR",
+            "11.00",
+            original=("USD", "12.34"),
+        ),
+        make_row(
+            "row-2",
+            "EXAMPLE CAFE",
+            "EUR",
+            "11.00",
+            original=("USD", "12.34"),
+            transacted_on=date(2026, 6, 17),
+        ),
+    )
+
+    result = match_receipts((receipt,), rows, MatchingConfig())
+
+    assert result.decisions[0].status is MatchStatus.ACCEPTED
+    assert result.decisions[0].statement_row_ids == ("row-1",)
+
+
 def test_abstain_when_runner_up_is_too_close() -> None:
     receipt = make_receipt("receipt-1", "Example Taxi", "EUR", "11.42")
     rows = (
